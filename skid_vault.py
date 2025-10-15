@@ -9,7 +9,6 @@ KDF_ITER = 300_000
 SALT_SIZE = 16
 NONCE_SIZE = 12
 
-# --- helpers ---
 def derive_key(password: bytes, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -67,7 +66,6 @@ def load_vault_interactive():
         raise SystemExit("Failed to decrypt vault. Wrong password or corrupted file.")
     return data, pw
 
-# --- commands ---
 def cmd_init(args):
     ensure_vault_dir()
     if os.path.exists(VAULT_PATH):
@@ -177,7 +175,7 @@ def cmd_restore(args):
         fw.write(fr.read())
     print(f"Restored vault from {src}")
 
-# --- main ---
+# main
 def main():
     p = argparse.ArgumentParser(prog="skid_vault")
     sub = p.add_subparsers(dest="cmd")

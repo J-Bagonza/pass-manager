@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -12,25 +11,18 @@ from typing import Dict, Optional
 from getpass import getpass
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import JSONResponse, HTMLResponse
-
-# crypto primitives re-used from your vault code
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-# --- Config (adjust if needed) ---
 VAULT_PATH = os.path.join("lock", "vault.bin")
 SERVER_TOKEN_PATH = os.path.join("lock", "server_token.txt")
 AUDIT_LOG = os.path.join("lock", "audit.log")
-
-# same as your vault constants
 KDF_ITER = 300_000
 SALT_SIZE = 16
 NONCE_SIZE = 12
-
-# Rate limiting: allow X requests per TOKEN per WINDOW seconds
-RATE_LIMIT_WINDOW = 60   # seconds
-RATE_LIMIT_MAX = 30      # max requests per window per token
+RATE_LIMIT_WINDOW = 60   
+RATE_LIMIT_MAX = 30     
 
 # In-memory rate state
 rate_state: Dict[str, Dict[str, int]] = {}
@@ -38,7 +30,6 @@ _rate_lock = asyncio.Lock()
 
 app = FastAPI(title="Skid Vault Server (minimal)")
 
-# --- crypto helpers (same logic as your vault) ---
 def derive_key(password: bytes, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -85,7 +76,7 @@ def write_vault_blob_atomic(blob: bytes) -> None:
     except Exception:
         pass
 
-# --- server token management ---
+# server token management
 def create_server_token_if_missing():
     if not os.path.isdir("lock"):
         os.makedirs("lock", exist_ok=True)
@@ -105,7 +96,7 @@ def read_server_token() -> str:
         raise SystemExit("Server token missing. Start server once to auto-create it.")
     return open(SERVER_TOKEN_PATH, "r").read().strip()
 
-# --- audit logging (append-only JSON lines) ---
+#audit logging
 def audit_event(token_id_masked: str, action: str, entry_name: Optional[str], client_ip: str, status: str, note: str = ""):
     ev = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -129,7 +120,7 @@ def mask_token(token: str) -> str:
         return ""
     return token[:4] + "..." + token[-4:]
 
-# --- simple rate limiter (per token) ---
+#rate limiter
 async def check_rate_limit(token: str):
     now = int(time.time())
     async with _rate_lock:
@@ -146,7 +137,7 @@ async def check_rate_limit(token: str):
         state["count"] += 1
         rate_state[token] = state
 
-# --- auth helper ---
+#auth helper
 def constant_time_compare(a: str, b: str) -> bool:
     if a is None or b is None:
         return False
@@ -166,14 +157,14 @@ async def require_bearer_token(authorization: str = Header(None), request: Reque
     await check_rate_limit(token)
     return token
 
-# --- vault access helpers ---
+#vault access helpers
 def read_vault_file() -> bytes:
     if not os.path.exists(VAULT_PATH):
         raise HTTPException(status_code=500, detail="Vault file not found on server")
     with open(VAULT_PATH, "rb") as f:
         return f.read()
 
-# --- endpoints (READ) ---
+#(READ)
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -214,7 +205,7 @@ async def get_entry(name: str, authorization: str = Header(None), request: Reque
     audit_event(mask_token(token), "get", name, client_ip, "ok")
     return safe_entry
 
-# --- endpoints (CREATE/UPDATE/DELETE) ---
+#(CREATE/UPDATE/DELETE)
 @app.put("/entry/{name}")
 async def put_entry(name: str, request: Request, authorization: str = Header(None)):
     token = await require_bearer_token(authorization, request)
@@ -271,7 +262,7 @@ async def delete_entry(name: str, authorization: str = Header(None), request: Re
     audit_event(mask_token(token), "delete", name, client_ip, "ok")
     return {"ok": True}
 
-# --- frontend (CRUD-capable UI) ---
+#frontend
 @app.get("/", response_class=HTMLResponse)
 def frontend():
     return """<!DOCTYPE html>
@@ -454,7 +445,7 @@ document.addEventListener("DOMContentLoaded", ()=>{ const t = getToken(); if(t) 
 </html>
 """
 
-# --- server run / setup ---
+#server setup
 def run_server(host: str, port: int, master_password: str):
     app.state.master_password = master_password
     import uvicorn
